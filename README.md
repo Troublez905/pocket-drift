@@ -22,5 +22,5 @@ See `WORKSHOP-PRO.md` for the documented scene-build process and current verific
 
 ## Creator
 
-Casper of Branded Creations, 2026  
-Public contact: `404kidzworld`
+-= Casper of Branded Creations, 2026  =-
+=-  Public contact: `404kidzworld` -=
