@@ -84,17 +84,20 @@
       transition: color 0.2s;
     }
     nav a:hover { color: var(--accent-cyan); }
-    /* Creator Badge */
+    /* Compact metallic creator badge */
     .creator-badge {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      padding: 6px 14px;
-      border-radius: 20px;
-      background: #11141a;
-      border: 1px solid #ffcc00;
-      box-shadow: 0 0 10px rgba(255, 204, 0, 0.2);
-      font-size: 0.85rem;
+      gap: 7px;
+      padding: 5px 10px;
+      border-radius: 7px 7px 11px 11px;
+      background: linear-gradient(145deg, #2a271b, #11141a 58%, #302711);
+      border: 1px solid rgba(255, 204, 0, 0.8);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 220, 0.16),
+        0 2px 10px rgba(255, 204, 0, 0.16);
+      font-size: 0.8rem;
+      line-height: 1.35;
       color: #f0f0f0;
       font-weight: 700;
     }
@@ -104,16 +107,23 @@
       right: 20px;
       bottom: 20px;
       z-index: 200;
+      padding: 7px 12px 10px;
+      border-radius: 8px 8px 14px 14px;
+      clip-path: polygon(0 0, 100% 0, 100% 78%, 50% 100%, 0 78%);
+      background: linear-gradient(145deg, #37301b, #11141a 58%, #403411);
+      box-shadow: 0 3px 14px rgba(255, 204, 0, 0.22);
     }
     .creator-badge .badge-check {
       display: inline-grid;
       place-items: center;
+      flex: 0 0 18px;
       width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      background: var(--badge-gold);
+      height: 20px;
+      clip-path: polygon(50% 0, 95% 16%, 88% 68%, 50% 100%, 12% 68%, 5% 16%);
+      background: linear-gradient(145deg, #fff1a3, #ffcc00 60%, #c99400);
       color: #11141a;
-      font-size: 0.75rem;
+      font-size: 0.7rem;
+      font-weight: 900;
       line-height: 1;
     }
     /* Section Headers */
@@ -199,7 +209,7 @@
         right: 12px;
         bottom: 12px;
         max-width: calc(100vw - 24px);
-        font-size: 0.75rem;
+        font-size: 0.72rem;
       }
     }
   </style>
