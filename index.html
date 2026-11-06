@@ -37,7 +37,7 @@
       position: relative;
       min-height: 100vh;
     }
-    /* Racing Kerb Divider */
+    /* Red-and-white racing kerb transitions */
     .racing-divider-curb {
       height: 12px;
       width: 100%;
@@ -179,7 +179,7 @@
       transition: transform 0.2s, box-shadow 0.2s;
     }
     .cta-button:hover {
-      transform: translateY(-2deg);
+      transform: translateY(-2px);
       box-shadow: 0 0 25px rgba(255, 42, 95, 0.7);
     }
     /* Content Sections */
@@ -205,6 +205,8 @@
       gap: 15px;
     }
     @media (max-width: 520px) {
+      header { padding: 14px 18px; }
+      nav a { margin-left: 10px; font-size: 0.95rem; }
       .creator-badge-fixed {
         right: 12px;
         bottom: 12px;
@@ -224,17 +226,18 @@
         <a href="#beta">Beta Release</a>
       </nav>
     </header>
-    <div class="racing-divider-curb"></div>
+    <div class="racing-divider-curb" aria-hidden="true"></div>
     <section class="hero">
       <h1>Miniature Motorsport On A Workshop Bench</h1>
       <p>Tiny cars. Big attitude. Experience sweeping corners, oversized workshop props, and high-octane drifting.</p>
       <a href="#beta" class="cta-button">v3.1 Beta Coming Nov 7, 2026</a>
     </section>
-    <div class="racing-divider-curb"></div>
+    <div class="racing-divider-curb" aria-hidden="true"></div>
     <section id="about" class="content-section">
       <h2 class="section-title">The Project</h2>
       <p>Pocket Drift: Overdrive pairs miniature GT-style cars with oversized workshop tools and a purpose-built circuit. Developed in Unity by Casper under Branded Creations 2026.</p>
     </section>
+    <div class="racing-divider-curb" aria-hidden="true"></div>
     <section id="garage" class="content-section">
       <h2 class="section-title">The Garage Lineup</h2>
       <div class="garage-grid">
@@ -252,7 +255,7 @@
         </div>
       </div>
     </section>
-    <div class="racing-divider-curb"></div>
+    <div class="racing-divider-curb" aria-hidden="true"></div>
     <footer>
       <p>&copy; 2026 Branded Creations. Created by Casper.</p>
       <div class="creator-badge">Official Launch Kit</div>
