@@ -1,0 +1,22 @@
+5. Quick Setup Steps in Unity (3 Minutes)
+
+Build Your First Racing Line:
+
+Create an empty GameObject named TrackWaypoints_Container and attach TrackWaypointCircuit.cs.
+
+Create 8–12 empty child GameObjects (WP_01, WP_02, etc.) and place them around your workbench obstacles. You will immediately see a glowing cyan racing loop in the Scene view!
+
+Duplicate Your Player Car to Create 3 AI Rivals:
+
+Duplicate PlayerCar_Container three times (AICar_Scrapper, AICar_VoltDozer, AICar_NeonViper).
+
+On each AI car's VisualCarRoot, remove CrossPlatformInputManager and add AIRivalDriftBrain.cs.
+
+Drag TrackWaypoints_Container into the Track Circuit slot on each AI car, and set their AIPersonality dropdowns (PrecisionDrifter, WorkbenchBrawler, ChaosTrickster).
+
+Add Knockback Physics:
+
+Select the PhysicsSphere inside your Player Car and all 3 AI Cars, and attach KnockbackCollisionHandler.cs.
+
+Hit Play—you now have a full 4-car micro-scale drift battle running on PC and ready to deploy to your Pixel 10 Pro Fold!
+

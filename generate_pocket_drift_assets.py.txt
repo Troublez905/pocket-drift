@@ -1,0 +1,715 @@
+
+"""
+================================================================================
+POCKET DRIFT: OVERDRIVE — AUTOMATED BLENDER PYTHON (bpy) MEGA-SCRIPT
+================================================================================
+Target Blender Version: Blender 3.6 LTS / 4.0+
+Target Game Engine: Unity 6 (Universal Render Pipeline - URP)
+Coordinate System Conversion: Z-Up (Blender) -> Y-Up, +Z Forward (Unity FBX)
+
+GENERATED ASSETS (Batch Exported to ./PocketDrift_Exports/):
+1. RC_Car_Scrapper.fbx
+   - Hierarchy:
+     RC_Car_Scrapper (Root Empty at 0,0,0)
+     ├── Chassis_Body (Armored wedge body, roll cage, spoiler, dual exhausts)
+     ├── Socket_Roof_Weapon (Empty at top center of roof)
+     ├── Socket_Hood_Utility (Empty at front bumper/hood)
+     ├── Wheel_FL (Separated mesh, pivot at exact wheel center)
+     ├── Wheel_FR (Separated mesh, pivot at exact wheel center)
+     ├── Wheel_RL (Separated mesh, pivot at exact wheel center)
+     └── Wheel_RR (Separated mesh, pivot at exact wheel center)
+2. Prop_Workbench_Table.fbx (Giant garage workbench with oil-stained wood top & pegboard)
+3. Prop_Crushed_SodaCan.fbx (Dent-deformed giant aluminum soda can obstacle)
+4. Prop_Soldering_Iron.fbx (Giant Chrome/Orange soldering iron hazard with glowing tip)
+5. Prop_Hardware_Pack.fbx (Oversized Hex Bolt, Hex Nut, and Lock Washer)
+6. Weapon_EMP_Mine.fbx (Octagonal magnetic disc mine with glowing cyan core)
+7. Weapon_Spring_Bumper.fbx (Dual-coil telescopic steel battering ram)
+
+HOW TO RUN:
+Option A (Blender GUI):
+  1. Open Blender -> Scripting Workspace.
+  2. Click 'Open' and select this file (`generate_pocket_drift_assets.py`).
+  3. Click 'Run Script' (Alt + P).
+  4. All .FBX files will be automatically exported to a `PocketDrift_Exports` folder
+     next to your saved .blend file (or in your user home/Desktop folder if unsaved).
+
+Option B (Headless CLI / Google Antigravity / Codex Terminal):
+  blender --background --python generate_pocket_drift_assets.py
+================================================================================
+"""
+
+import bpy
+import bmesh
+import math
+import os
+from mathutils import Vector, Matrix
+
+# ==============================================================================
+# 1. UTILITY & SCENE MANAGEMENT FUNCTIONS
+# ==============================================================================
+
+def clear_scene():
+    """Completely clears all objects, meshes, materials, and collections."""
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    
+    # Ensure metric units at 1.0 scale for Unity 1 unit = 1 meter parity
+    scene = bpy.context.scene
+    scene.unit_settings.system = 'METRIC'
+    scene.unit_settings.scale_length = 1.0
+
+
+def create_pbr_material(name, base_color, metallic=0.0, roughness=0.5, emission_color=None, emission_strength=0.0):
+    """Creates a Principled BSDF material compatible with Blender 3.6 and 4.x+."""
+    mat = bpy.data.materials.get(name)
+    if mat is None:
+        mat = bpy.data.materials.new(name=name)
+    mat.use_nodes = True
+    nodes = mat.node_tree.nodes
+    bsdf = nodes.get("Principled BSDF")
+    if not bsdf:
+        bsdf = nodes.new(type="ShaderNodeBsdfPrincipled")
+
+    # Base Color (RGBA)
+    bsdf.inputs["Base Color"].default_value = base_color
+    
+    # Metallic & Roughness
+    if "Metallic" in bsdf.inputs:
+        bsdf.inputs["Metallic"].default_value = metallic
+    if "Roughness" in bsdf.inputs:
+        bsdf.inputs["Roughness"].default_value = roughness
+
+    # Emission (Handles both Blender 3.x 'Emission' and Blender 4.x 'Emission Color')
+    if emission_color is not None and emission_strength > 0.0:
+        if "Emission Color" in bsdf.inputs:
+            bsdf.inputs["Emission Color"].default_value = emission_color
+        elif "Emission" in bsdf.inputs:
+            bsdf.inputs["Emission"].default_value = emission_color
+            
+        if "Emission Strength" in bsdf.inputs:
+            bsdf.inputs["Emission Strength"].default_value = emission_strength
+
+    # Also set viewport display color for easy visual inspection
+    mat.diffuse_color = base_color
+    return mat
+
+
+def assign_material(obj, mat):
+    """Assigns a single material to an object."""
+    if obj.data.materials:
+        obj.data.materials[0] = mat
+    else:
+        obj.data.materials.append(mat)
+
+
+def set_smooth_with_autosmooth(obj, angle_deg=35.0):
+    """Applies smooth shading and sharp edges by angle (compatible with 3.x & 4.x)."""
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+    bpy.ops.object.shade_smooth()
+    if hasattr(obj.data, "use_auto_smooth"):
+        obj.data.use_auto_smooth = True
+        obj.data.auto_smooth_angle = math.radians(angle_deg)
+    obj.select_set(False)
+
+
+def add_bevel_modifier(obj, width=0.02, segments=2):
+    """Adds and applies a clean bevel modifier for game-ready edge highlights."""
+    mod = obj.modifiers.new(name="Bevel", type='BEVEL')
+    mod.width = width
+    mod.segments = segments
+    mod.limit_method = 'ANGLE'
+    mod.angle_limit = math.radians(30.0)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.modifier_apply(modifier=mod.name)
+
+
+def bake_transforms(obj, location=False, rotation=True, scale=True):
+    """Applies transforms so Unity receives clean (1,1,1) scale and (0,0,0) rotation."""
+    bpy.ops.object.select_all(action='DESELECT')
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.transform_apply(location=location, rotation=rotation, scale=scale)
+    obj.select_set(False)
+
+
+def export_hierarchy_to_fbx(root_obj, filename, export_dir):
+    """Selects a root object and all its descendants and exports a Unity-ready FBX."""
+    bpy.ops.object.select_all(action='DESELECT')
+    
+    def select_recursive(ob):
+        ob.select_set(True)
+        for child in ob.children:
+            select_recursive(child)
+            
+    select_recursive(root_obj)
+    bpy.context.view_layer.objects.active = root_obj
+    
+    filepath = os.path.join(export_dir, filename)
+    
+    bpy.ops.export_scene.fbx(
+        filepath=filepath,
+        use_selection=True,
+        global_scale=1.0,
+        apply_unit_scale=True,
+        apply_scale_options='FBX_SCALE_ALL',
+        axis_forward='Y',      # Blender +Y maps to Unity +Z Forward
+        axis_up='Z',           # Blender +Z maps to Unity +Y Up
+        object_types={'EMPTY', 'MESH'},
+        use_mesh_modifiers=True,
+        mesh_smooth_type='FACE',
+        bake_space_transform=True
+    )
+    print(f"[SUCCESS] Exported Unity-Ready FBX: {filepath}")
+
+
+# ==============================================================================
+# 2. MATERIAL PALETTE INITIALIZATION
+# ==============================================================================
+
+def build_material_library():
+    """Creates a shared dictionary of stylized PBR materials for Pocket Drift."""
+    mats = {}
+    mats["Scrapper_Orange"] = create_pbr_material("Mat_Scrapper_Orange", (0.95, 0.32, 0.04, 1.0), metallic=0.35, roughness=0.35)
+    mats["Dark_Steel"]      = create_pbr_material("Mat_Dark_Steel",      (0.14, 0.15, 0.17, 1.0), metallic=0.85, roughness=0.40)
+    mats["Chrome"]          = create_pbr_material("Mat_Chrome",          (0.85, 0.87, 0.90, 1.0), metallic=0.98, roughness=0.12)
+    mats["Tire_Rubber"]     = create_pbr_material("Mat_Tire_Rubber",     (0.06, 0.06, 0.07, 1.0), metallic=0.05, roughness=0.85)
+    mats["Cockpit_Glass"]   = create_pbr_material("Mat_Cockpit_Glass",   (0.05, 0.08, 0.12, 1.0), metallic=0.90, roughness=0.10)
+    mats["Neon_Cyan"]       = create_pbr_material("Mat_Neon_Cyan",       (0.0, 0.95, 1.0, 1.0),   metallic=0.10, roughness=0.20, emission_color=(0.0, 0.95, 1.0, 1.0), emission_strength=4.5)
+    mats["Tail_Red"]        = create_pbr_material("Mat_Tail_Red",        (1.0, 0.05, 0.08, 1.0),  metallic=0.10, roughness=0.20, emission_color=(1.0, 0.05, 0.08, 1.0), emission_strength=4.0)
+    mats["Wood_Workbench"]  = create_pbr_material("Mat_Wood_Workbench",  (0.38, 0.24, 0.12, 1.0), metallic=0.02, roughness=0.75)
+    mats["Pegboard_Grey"]   = create_pbr_material("Mat_Pegboard_Grey",   (0.22, 0.24, 0.27, 1.0), metallic=0.20, roughness=0.65)
+    mats["Soda_Red"]        = create_pbr_material("Mat_Soda_Red",        (0.85, 0.06, 0.10, 1.0), metallic=0.80, roughness=0.25)
+    mats["Hot_Iron_Tip"]    = create_pbr_material("Mat_Hot_Iron_Tip",    (1.0, 0.35, 0.0, 1.0),   metallic=0.60, roughness=0.30, emission_color=(1.0, 0.28, 0.0, 1.0), emission_strength=5.0)
+    mats["Brass_Gold"]      = create_pbr_material("Mat_Brass_Gold",      (0.85, 0.62, 0.15, 1.0), metallic=0.90, roughness=0.30)
+    return mats
+
+
+# ==============================================================================
+# 3. ASSET GENERATOR 1: RC_Car_Scrapper.fbx (Hero Playable Vehicle)
+# ==============================================================================
+# Note on Orientation:
+# In Blender, +Y is Forward, -Y is Back, +X is Right, -X is Left, +Z is Up.
+# Dimensions: ~1.25m wide (X), ~2.15m long (Y), ~0.78m tall (Z).
+
+def build_rc_car_scrapper(mats, offset=Vector((0, 0, 0))):
+    """Generates the complete RC_Car_Scrapper hierarchy with separated wheels & sockets."""
+    
+    # 1. Root Empty at (0,0,0) ground plane
+    root = bpy.data.objects.new("RC_Car_Scrapper", None)
+    root.empty_display_type = 'PLAIN_AXES'
+    root.empty_display_size = 1.0
+    root.location = offset
+    bpy.context.collection.objects.link(root)
+
+    # 2. Build Chassis_Body using BMesh for an aggressive wedge silhouette
+    chassis_mesh = bpy.data.meshes.new("Chassis_Body_Mesh")
+    chassis_obj = bpy.data.objects.new("Chassis_Body", chassis_mesh)
+    chassis_obj.location = offset + Vector((0, 0, 0))
+    chassis_obj.parent = root
+    bpy.context.collection.objects.link(chassis_obj)
+
+    bm = bmesh.new()
+    # Create main wedge hull box
+    bmesh.ops.create_cube(bm, size=1.0)
+    for v in bm.verts:
+        # Scale base dimensions: Width 1.06m, Length 2.05m, Height 0.36m
+        v.co.x *= 1.06
+        v.co.y *= 2.05
+        v.co.z *= 0.36
+        v.co.z += 0.34  # Lift above ground clearance (0.16m bottom clearance)
+
+        # Taper front nose (+Y) downward and slightly narrower for wedge look
+        if v.co.y > 0.4:
+            v.co.x *= 0.82
+            if v.co.z > 0.35:
+                v.co.z -= 0.10
+        # Flare rear end (-Y) slightly wider and higher
+        elif v.co.y < -0.4:
+            v.co.x *= 1.05
+            if v.co.z > 0.35:
+                v.co.z += 0.05
+
+    bm.to_mesh(chassis_mesh)
+    bm.free()
+    assign_material(chassis_obj, mats["Scrapper_Orange"])
+    add_bevel_modifier(chassis_obj, width=0.03, segments=2)
+
+    # 3. Add Cabin / Cockpit Canopy (joined into Chassis_Body)
+    bpy.ops.mesh.primitive_cube_add(size=1.0, location=offset + Vector((0, -0.10, 0.62)))
+    cabin = bpy.context.active_object
+    cabin.scale = (0.78, 0.92, 0.24)
+    bake_transforms(cabin, location=False, rotation=True, scale=True)
+    # Taper top of cabin
+    for v in cabin.data.vertices:
+        if v.co.z > 0.05:
+            v.co.x *= 0.76
+            v.co.y *= 0.72
+            if v.co.y > 0:
+                v.co.y -= 0.12 # Slant windshield back
+    assign_material(cabin, mats["Cockpit_Glass"])
+    add_bevel_modifier(cabin, width=0.02, segments=2)
+
+    # 4. Add Front Armored Bull-Bar / Bash Guard
+    bpy.ops.mesh.primitive_cylinder_add(vertices=12, radius=0.045, depth=1.05, location=offset + Vector((0, 1.08, 0.26)), rotation=(0, math.radians(90), 0))
+    bullbar = bpy.context.active_object
+    assign_material(bullbar, mats["Dark_Steel"])
+
+    # 5. Add Rear Wing Spoiler (2 Uprights + Aerofoil Blade)
+    bpy.ops.mesh.primitive_cube_add(size=1.0, location=offset + Vector((0, -0.96, 0.74)))
+    spoiler_wing = bpy.context.active_object
+    spoiler_wing.scale = (1.16, 0.24, 0.04)
+    spoiler_wing.rotation_euler = (math.radians(-14), 0, 0)
+    bake_transforms(spoiler_wing)
+    assign_material(spoiler_wing, mats["Dark_Steel"])
+
+    for x_side in (-0.42, 0.42):
+        bpy.ops.mesh.primitive_cube_add(size=1.0, location=offset + Vector((x_side, -0.92, 0.62)))
+        strut = bpy.context.active_object
+        strut.scale = (0.04, 0.18, 0.24)
+        bake_transforms(strut)
+        assign_material(strut, mats["Dark_Steel"])
+        # Join strut to spoiler
+        bpy.ops.object.select_all(action='DESELECT')
+        strut.select_set(True)
+        spoiler_wing.select_set(True)
+        bpy.context.view_layer.objects.active = spoiler_wing
+        bpy.ops.object.join()
+
+    # 6. Add Dual Rear Exhaust Pipes & RC Whip Antenna
+    exhaust_objs = []
+    for x_pipe in (-0.28, 0.28):
+        bpy.ops.mesh.primitive_cylinder_add(vertices=12, radius=0.055, depth=0.28, location=offset + Vector((x_pipe, -1.06, 0.28)), rotation=(math.radians(78), 0, 0))
+        pipe = bpy.context.active_object
+        assign_material(pipe, mats["Chrome"])
+        exhaust_objs.append(pipe)
+
+    # RC Whip Antenna
+    bpy.ops.mesh.primitive_cylinder_add(vertices=8, radius=0.012, depth=0.65, location=offset + Vector((-0.34, -0.75, 0.82)), rotation=(math.radians(-12), 0, 0))
+    antenna = bpy.context.active_object
+    assign_material(antenna, mats["Chrome"])
+
+    # LED Headlights (Front Cyan) & Taillight Strip (Rear Red)
+    bpy.ops.mesh.primitive_cube_add(size=1.0, location=offset + Vector((0, 1.03, 0.36)))
+    headlights = bpy.context.active_object
+    headlights.scale = (0.72, 0.04, 0.06)
+    bake_transforms(headlights)
+    assign_material(headlights, mats["Neon_Cyan"])
+
+    bpy.ops.mesh.primitive_cube_add(size=1.0, location=offset + Vector((0, -1.03, 0.44)))
+    taillights = bpy.context.active_object
+    taillights.scale = (0.84, 0.04, 0.06)
+    bake_transforms(taillights)
+    assign_material(taillights, mats["Tail_Red"])
+
+    # Join all chassis sub-parts into `Chassis_Body`
+    bpy.ops.object.select_all(action='DESELECT')
+    for part in [cabin, bullbar, spoiler_wing, antenna, headlights, taillights] + exhaust_objs:
+        part.select_set(True)
+    chassis_obj.select_set(True)
+    bpy.context.view_layer.objects.active = chassis_obj
+    bpy.ops.object.join()
+    
+    # Reset Chassis_Body origin to Root (0,0,0) and bake rotation/scale
+    bpy.context.scene.cursor.location = offset
+    bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+    bake_transforms(chassis_obj, location=False, rotation=True, scale=True)
+    set_smooth_with_autosmooth(chassis_obj, 35.0)
+
+    # 7. Create Modular Attachment Sockets (Empties parented to Root)
+    socket_roof = bpy.data.objects.new("Socket_Roof_Weapon", None)
+    socket_roof.empty_display_type = 'ARROWS'
+    socket_roof.empty_display_size = 0.25
+    socket_roof.location = Vector((0, -0.10, 0.76))
+    socket_roof.parent = root
+    bpy.context.collection.objects.link(socket_roof)
+
+    socket_hood = bpy.data.objects.new("Socket_Hood_Utility", None)
+    socket_hood.empty_display_type = 'ARROWS'
+    socket_hood.empty_display_size = 0.25
+    socket_hood.location = Vector((0, 0.95, 0.42))
+    socket_hood.parent = root
+    bpy.context.collection.objects.link(socket_hood)
+
+    # 8. Build Separated Chunky RC Wheels (Centered pivots at each axle)
+    wheel_configs = [
+        ("Wheel_FL", Vector((-0.60,  0.68, 0.22))),
+        ("Wheel_FR", Vector(( 0.60,  0.68, 0.22))),
+        ("Wheel_RL", Vector((-0.62, -0.66, 0.23))),
+        ("Wheel_RR", Vector(( 0.62, -0.66, 0.23))),
+    ]
+
+    for w_name, w_local_pos in wheel_configs:
+        w_world_pos = offset + w_local_pos
+        bpy.ops.mesh.primitive_cylinder_add(
+            vertices=24,
+            radius=0.22,
+            depth=0.24,
+            location=w_world_pos,
+            rotation=(0, math.radians(90), 0)
+        )
+        wheel_obj = bpy.context.active_object
+        wheel_obj.name = w_name
+        assign_material(wheel_obj, mats["Tire_Rubber"])
+
+        # Add Chrome Hubcap inset
+        hub_offset_x = -0.09 if w_local_pos.x < 0 else 0.09
+        bpy.ops.mesh.primitive_cylinder_add(
+            vertices=12,
+            radius=0.13,
+            depth=0.08,
+            location=w_world_pos + Vector((hub_offset_x, 0, 0)),
+            rotation=(0, math.radians(90), 0)
+        )
+        hub_obj = bpy.context.active_object
+        assign_material(hub_obj, mats["Chrome"])
+
+        # Join hubcap into wheel, preserving exact center pivot of the tire
+        bpy.ops.object.select_all(action='DESELECT')
+        hub_obj.select_set(True)
+        wheel_obj.select_set(True)
+        bpy.context.view_layer.objects.active = wheel_obj
+        bpy.ops.object.join()
+
+        bpy.context.scene.cursor.location = w_world_pos
+        bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+        add_bevel_modifier(wheel_obj, width=0.015, segments=2)
+        bake_transforms(wheel_obj, location=False, rotation=True, scale=True)
+        set_smooth_with_autosmooth(wheel_obj, 35.0)
+
+        # Parent to Root and restore local coordinates
+        wheel_obj.parent = root
+        wheel_obj.matrix_parent_inverse = root.matrix_world.inverted()
+
+    return root
+
+
+# ==============================================================================
+# 4. ASSET GENERATOR 2: Prop_Workbench_Table.fbx (Giant Garage Workbench Arena)
+# ==============================================================================
+
+def build_workbench_table(mats, offset=Vector((15, 0, 0))):
+    """Generates a giant 40m x 24m workbench arena with raised borders and pegboard."""
+    root = bpy.data.objects.new("Prop_Workbench_Table", None)
+    root.location = offset
+    bpy.context.collection.objects.link(root)
+
+    # Main Butcher-Block Tabletop (Top driving surface sits at Z = 0.0)
+    bpy.ops.mesh.primitive_cube_add(size=1.0, location=offset + Vector((0, 0, -0.60)))
+    tabletop = bpy.context.active_object
+    tabletop.name = "Workbench_Tabletop"
+    tabletop.scale = (40.0, 24.0, 1.20)
+    bake_transforms(tabletop)
+    assign_material(tabletop, mats["Wood_Workbench"])
+    add_bevel_modifier(tabletop, width=0.08, segments=2)
+    tabletop.parent = root
+    tabletop.matrix_parent_inverse = root.matrix_world.inverted()
+
+    # Back Pegboard Wall (+Y side)
+    bpy.ops.mesh.primitive_cube_add(size=1.0, location=offset + Vector((0, 11.75, 4.0)))
+    pegboard = bpy.context.active_object
+    pegboard.name = "Workbench_Pegboard_Backwall"
+    pegboard.scale = (40.0, 0.50, 8.0)
+    bake_transforms(pegboard)
+    assign_material(pegboard, mats["Pegboard_Grey"])
+    pegboard.parent = root
+    pegboard.matrix_parent_inverse = root.matrix_world.inverted()
+
+    # 4 Heavy Steel I-Beam Legs
+    leg_positions = [
+        Vector((-18.5, -10.5, -8.6)),
+        Vector(( 18.5, -10.5, -8.6)),
+        Vector((-18.5,  10.5, -8.6)),
+        Vector(( 18.5,  10.5, -8.6)),
+    ]
+    for idx, l_pos in enumerate(leg_positions):
+        bpy.ops.mesh.primitive_cube_add(size=1.0, location=offset + l_pos)
+        leg = bpy.context.active_object
+        leg.name = f"Workbench_Steel_Leg_{idx+1}"
+        leg.scale = (1.4, 1.4, 16.0)
+        bake_transforms(leg)
+        assign_material(leg, mats["Dark_Steel"])
+        leg.parent = root
+        leg.matrix_parent_inverse = root.matrix_world.inverted()
+
+    return root
+
+
+# ==============================================================================
+# 5. ASSET GENERATOR 3: Prop_Crushed_SodaCan.fbx (Giant Crushed Soda Can Obstacle)
+# ==============================================================================
+
+def build_crushed_soda_can(mats, offset=Vector((0, 8, 0))):
+    """Generates a giant 3.5m x 1.8m crushed aluminum soda can sitting on its side."""
+    root = bpy.data.objects.new("Prop_Crushed_SodaCan", None)
+    root.location = offset
+    bpy.context.collection.objects.link(root)
+
+    bpy.ops.mesh.primitive_cylinder_add(
+        vertices=28,
+        radius=0.90,
+        depth=3.40,
+        location=offset + Vector((0, 0, 0.82)),
+        rotation=(0, math.radians(90), 0)
+    )
+    can = bpy.context.active_object
+    can.name = "SodaCan_Body"
+    bake_transforms(can)
+
+    # Procedurally dent the middle vertices to look like a crushed aluminum can
+    for v in can.data.vertices:
+        if abs(v.co.x) < 1.15:
+            dent_factor = math.cos((v.co.x / 1.15) * (math.pi / 2.0))
+            if v.co.z > 0.15:
+                v.co.z -= 0.42 * dent_factor
+            v.co.y *= (1.0 + 0.18 * dent_factor)
+
+    assign_material(can, mats["Soda_Red"])
+    add_bevel_modifier(can, width=0.03, segments=2)
+    set_smooth_with_autosmooth(can, 40.0)
+
+    # Set origin to bottom-center
+    bpy.context.scene.cursor.location = offset
+    bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+    can.parent = root
+    can.matrix_parent_inverse = root.matrix_world.inverted()
+    return root
+
+
+# ==============================================================================
+# 6. ASSET GENERATOR 4: Prop_Soldering_Iron.fbx (Giant Hazard Obstacle)
+# ==============================================================================
+
+def build_soldering_iron(mats, offset=Vector((0, 14, 0))):
+    """Generates an 8m long giant soldering iron with a glowing emissive tip."""
+    root = bpy.data.objects.new("Prop_Soldering_Iron", None)
+    root.location = offset
+    bpy.context.collection.objects.link(root)
+
+    # Ribbed Insulated Handle
+    bpy.ops.mesh.primitive_cylinder_add(
+        vertices=20, radius=0.48, depth=3.6,
+        location=offset + Vector((-2.0, 0, 0.55)),
+        rotation=(0, math.radians(86), 0)
+    )
+    handle = bpy.context.active_object
+    handle.name = "Soldering_Handle"
+    assign_material(handle, mats["Scrapper_Orange"])
+
+    # Stainless Steel Heater Barrel
+    bpy.ops.mesh.primitive_cylinder_add(
+        vertices=20, radius=0.26, depth=2.8,
+        location=offset + Vector((1.1, 0, 0.38)),
+        rotation=(0, math.radians(86), 0)
+    )
+    barrel = bpy.context.active_object
+    barrel.name = "Soldering_Barrel"
+    assign_material(barrel, mats["Chrome"])
+
+    # Glowing Conical Heating Tip
+    bpy.ops.mesh.primitive_cone_add(
+        vertices=20, radius1=0.26, radius2=0.03, depth=1.5,
+        location=offset + Vector((3.2, 0, 0.24)),
+        rotation=(0, math.radians(86), 0)
+    )
+    tip = bpy.context.active_object
+    tip.name = "Soldering_Glowing_Tip"
+    assign_material(tip, mats["Hot_Iron_Tip"])
+
+    # Sheet-Metal Wire Stand
+    bpy.ops.mesh.primitive_cube_add(size=1.0, location=offset + Vector((0.0, 0, 0.25)))
+    stand = bpy.context.active_object
+    stand.name = "Soldering_Stand"
+    stand.scale = (0.8, 1.1, 0.5)
+    bake_transforms(stand)
+    assign_material(stand, mats["Dark_Steel"])
+
+    for part in [handle, barrel, tip, stand]:
+        bake_transforms(part)
+        set_smooth_with_autosmooth(part, 35.0)
+        part.parent = root
+        part.matrix_parent_inverse = root.matrix_world.inverted()
+
+    return root
+
+
+# ==============================================================================
+# 7. ASSET GENERATOR 5: Prop_Hardware_Pack.fbx (Giant Bolt, Nut & Washer Scatter)
+# ==============================================================================
+
+def build_hardware_pack(mats, offset=Vector((0, 20, 0))):
+    """Generates oversized Hex Bolt, Hex Nut, and Washer scatter props."""
+    root = bpy.data.objects.new("Prop_Hardware_Pack", None)
+    root.location = offset
+    bpy.context.collection.objects.link(root)
+
+    # 1. Giant Hex Bolt (6-sided head + threaded shaft)
+    bpy.ops.mesh.primitive_cylinder_add(vertices=6, radius=0.55, depth=0.35, location=offset + Vector((-1.8, 0, 1.25)))
+    bolt_head = bpy.context.active_object
+    bpy.ops.mesh.primitive_cylinder_add(vertices=16, radius=0.30, depth=1.20, location=offset + Vector((-1.8, 0, 0.60)))
+    bolt_shaft = bpy.context.active_object
+    bpy.ops.object.select_all(action='DESELECT')
+    bolt_shaft.select_set(True)
+    bolt_head.select_set(True)
+    bpy.context.view_layer.objects.active = bolt_head
+    bpy.ops.object.join()
+    bolt_head.name = "Giant_Hex_Bolt"
+    assign_material(bolt_head, mats["Dark_Steel"])
+    add_bevel_modifier(bolt_head, width=0.02, segments=2)
+    bake_transforms(bolt_head)
+    bolt_head.parent = root
+    bolt_head.matrix_parent_inverse = root.matrix_world.inverted()
+
+    # 2. Giant Hex Nut (6-sided cylinder)
+    bpy.ops.mesh.primitive_cylinder_add(vertices=6, radius=0.60, depth=0.45, location=offset + Vector((0.0, 0, 0.225)))
+    nut = bpy.context.active_object
+    nut.name = "Giant_Hex_Nut"
+    assign_material(nut, mats["Chrome"])
+    add_bevel_modifier(nut, width=0.025, segments=2)
+    bake_transforms(nut)
+    nut.parent = root
+    nut.matrix_parent_inverse = root.matrix_world.inverted()
+
+    # 3. Giant Flat Washer
+    bpy.ops.mesh.primitive_cylinder_add(vertices=24, radius=0.70, depth=0.12, location=offset + Vector((1.8, 0, 0.06)))
+    washer = bpy.context.active_object
+    washer.name = "Giant_Flat_Washer"
+    assign_material(washer, mats["Brass_Gold"])
+    add_bevel_modifier(washer, width=0.015, segments=2)
+    bake_transforms(washer)
+    washer.parent = root
+    washer.matrix_parent_inverse = root.matrix_world.inverted()
+
+    return root
+
+
+# ==============================================================================
+# 8. ASSET GENERATOR 6: Weapon_EMP_Mine.fbx & Weapon_Spring_Bumper.fbx
+# ==============================================================================
+
+def build_emp_mine(mats, offset=Vector((-8, 0, 0))):
+    """Generates a deployable octagonal EMP Mine with a glowing cyan plasma core."""
+    root = bpy.data.objects.new("Weapon_EMP_Mine", None)
+    root.location = offset
+    bpy.context.collection.objects.link(root)
+
+    bpy.ops.mesh.primitive_cylinder_add(vertices=8, radius=0.40, depth=0.16, location=offset + Vector((0, 0, 0.08)))
+    casing = bpy.context.active_object
+    casing.name = "EMP_Casing"
+    assign_material(casing, mats["Dark_Steel"])
+    add_bevel_modifier(casing, width=0.02, segments=2)
+
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=16, ring_count=8, radius=0.18, location=offset + Vector((0, 0, 0.14)))
+    core = bpy.context.active_object
+    core.name = "EMP_Plasma_Core"
+    core.scale = (1.0, 1.0, 0.5)
+    bake_transforms(core)
+    assign_material(core, mats["Neon_Cyan"])
+
+    for part in [casing, core]:
+        bake_transforms(part)
+        part.parent = root
+        part.matrix_parent_inverse = root.matrix_world.inverted()
+
+    return root
+
+
+def build_spring_bumper(mats, offset=Vector((-8, 4, 0))):
+    """Generates the Hood-Mounted Telescopic Spring Battering Ram (`Socket_Hood_Utility`)."""
+    root = bpy.data.objects.new("Weapon_Spring_Bumper", None)
+    root.location = offset
+    bpy.context.collection.objects.link(root)
+
+    # Mounting Bracket at (0,0,0)
+    bpy.ops.mesh.primitive_cube_add(size=1.0, location=offset + Vector((0, 0.05, 0.0)))
+    bracket = bpy.context.active_object
+    bracket.name = "Bumper_Mount_Bracket"
+    bracket.scale = (0.55, 0.10, 0.18)
+    bake_transforms(bracket)
+    assign_material(bracket, mats["Dark_Steel"])
+
+    # Dual Telescopic Pistons pointing forward (+Y in Blender -> +Z in Unity)
+    for x_piston in (-0.18, 0.18):
+        bpy.ops.mesh.primitive_cylinder_add(
+            vertices=12, radius=0.045, depth=0.38,
+            location=offset + Vector((x_piston, 0.24, 0.0)),
+            rotation=(math.radians(90), 0, 0)
+        )
+        piston = bpy.context.active_object
+        piston.name = f"Bumper_Piston_{'L' if x_piston < 0 else 'R'}"
+        assign_material(piston, mats["Chrome"])
+        bake_transforms(piston)
+        piston.parent = root
+        piston.matrix_parent_inverse = root.matrix_world.inverted()
+
+    # Curved Impact Ram Plate at front
+    bpy.ops.mesh.primitive_cube_add(size=1.0, location=offset + Vector((0, 0.45, 0.0)))
+    ram_plate = bpy.context.active_object
+    ram_plate.name = "Bumper_Impact_Plate"
+    ram_plate.scale = (0.76, 0.12, 0.24)
+    bake_transforms(ram_plate)
+    assign_material(ram_plate, mats["Brass_Gold"])
+    add_bevel_modifier(ram_plate, width=0.02, segments=2)
+
+    for part in [bracket, ram_plate]:
+        part.parent = root
+        part.matrix_parent_inverse = root.matrix_world.inverted()
+
+    return root
+
+
+# ==============================================================================
+# 9. MAIN EXECUTION & BATCH FBX EXPORT PIPELINE
+# ==============================================================================
+
+def main():
+    print("==================================================================")
+    print("Starting Pocket Drift: Overdrive Procedural 3D Asset Generation...")
+    print("==================================================================")
+
+    clear_scene()
+    mats = build_material_library()
+
+    # Determine output folder for exported FBX files
+    blend_path = bpy.data.filepath
+    if blend_path:
+        base_dir = os.path.dirname(blend_path)
+    else:
+        base_dir = os.path.join(os.path.expanduser("~"), "Desktop")
+        if not os.path.exists(base_dir):
+            base_dir = os.path.expanduser("~")
+
+    export_dir = os.path.join(base_dir, "PocketDrift_Exports")
+    os.makedirs(export_dir, exist_ok=True)
+
+    # Build all 7 core assets in the scene (spaced cleanly for visual inspection,
+    # and temporarily moved to World Origin (0,0,0) during individual FBX export)
+    assets_to_export = [
+        (build_rc_car_scrapper(mats, offset=Vector((0, 0, 0))),       "RC_Car_Scrapper.fbx"),
+        (build_workbench_table(mats, offset=Vector((30, 0, 0))),      "Prop_Workbench_Table.fbx"),
+        (build_crushed_soda_can(mats, offset=Vector((-6, 6, 0))),     "Prop_Crushed_SodaCan.fbx"),
+        (build_soldering_iron(mats, offset=Vector((-6, 12, 0))),      "Prop_Soldering_Iron.fbx"),
+        (build_hardware_pack(mats, offset=Vector((-6, 18, 0))),       "Prop_Hardware_Pack.fbx"),
+        (build_emp_mine(mats, offset=Vector((-6, -4, 0))),            "Weapon_EMP_Mine.fbx"),
+        (build_spring_bumper(mats, offset=Vector((-6, -8, 0))),       "Weapon_Spring_Bumper.fbx"),
+    ]
+
+    for root_obj, fbx_filename in assets_to_export:
+        # Save showcase position, snap root to (0,0,0) for clean Unity prefab origin, then restore
+        saved_loc = root_obj.location.copy()
+        root_obj.location = Vector((0, 0, 0))
+        bpy.context.view_layer.update()
+
+        export_hierarchy_to_fbx(root_obj, fbx_filename, export_dir)
+
+        root_obj.location = saved_loc
+        bpy.context.view_layer.update()
+
+    print("==================================================================")
+    print(f"ALL 7 UNITY-READY .FBX ASSETS EXPORTED TO: {export_dir}")
+    print("==================================================================")
+
+
+if __name__ == "__main__":
+    main()
+generate_pocket_drift_assets.py
+Displaying generate_pocket_drift_assets.py.
