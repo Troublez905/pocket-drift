@@ -92,13 +92,30 @@
       padding: 6px 14px;
       border-radius: 20px;
       background: #11141a;
-      border: 1px solid var(--badge-gold);
+      border: 1px solid #ffcc00;
       box-shadow: 0 0 10px rgba(255, 204, 0, 0.2);
       font-size: 0.85rem;
       color: #f0f0f0;
       font-weight: 700;
     }
     .creator-badge span { color: var(--badge-gold); }
+    .creator-badge-fixed {
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      z-index: 200;
+    }
+    .creator-badge .badge-check {
+      display: inline-grid;
+      place-items: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--badge-gold);
+      color: #11141a;
+      font-size: 0.75rem;
+      line-height: 1;
+    }
     /* Section Headers */
     .section-title {
       font-family: 'Orbitron', sans-serif;
@@ -177,13 +194,20 @@
       flex-wrap: wrap;
       gap: 15px;
     }
+    @media (max-width: 520px) {
+      .creator-badge-fixed {
+        right: 12px;
+        bottom: 12px;
+        max-width: calc(100vw - 24px);
+        font-size: 0.75rem;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="site-container">
     <header>
       <div class="header-logo">Pocket Drift</div>
-      <div class="creator-badge">Created by <span>Casper</span> | Branded Creations 2026</div>
       <nav>
         <a href="#about">About</a>
         <a href="#garage">Garage</a>
@@ -223,6 +247,10 @@
       <p>&copy; 2026 Branded Creations. Created by Casper.</p>
       <div class="creator-badge">Official Launch Kit</div>
     </footer>
+  </div>
+  <div class="creator-badge creator-badge-fixed">
+    <span class="badge-check" aria-label="Verified">✓</span>
+    <span>Created by Casper | Branded Creations 2026</span>
   </div>
 </body>
 </html>
