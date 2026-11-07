@@ -188,6 +188,9 @@
     }
     .cta-button::after { content: '→'; font-size: 1.1rem; }
     .cta-button:hover { transform: translateY(-2px); filter: brightness(1.08); box-shadow: 0 12px 30px rgba(255,42,95,0.32); }
+    .hero-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
+    .cta-button.secondary { color: var(--accent-cyan); background: rgba(0,229,242,0.07); border-color: rgba(0,229,242,0.42); box-shadow: none; }
+    .cta-button.secondary:hover { box-shadow: 0 12px 30px rgba(0,229,242,0.13); }
 
     .content-section { padding: clamp(52px, 8vw, 82px) var(--page-gutter); scroll-margin-top: 85px; }
     .section-heading { margin-bottom: 28px; }
@@ -211,6 +214,15 @@
     }
     .section-intro { max-width: 700px; margin: 0; color: var(--text-muted); font-size: 1.1rem; }
     .project-copy { max-width: 830px; margin: 0; color: #d0d8e2; font-size: 1.18rem; }
+    .download-grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 18px; margin-top: 30px; }
+    .download-card { padding: clamp(24px, 4vw, 36px); border: 1px solid rgba(0,229,242,0.24); border-radius: 8px; background: linear-gradient(135deg, rgba(0,229,242,0.08), transparent 58%), #121923; box-shadow: 0 14px 32px rgba(0,0,0,0.24); }
+    .download-card h3 { margin: 0 0 14px; font-family: 'Orbitron', sans-serif; font-size: 1rem; text-transform: uppercase; }
+    .install-steps { margin: 0; padding-left: 22px; color: #d0d8e2; }
+    .install-steps li + li { margin-top: 9px; }
+    .download-meta { display: grid; align-content: start; gap: 17px; }
+    .download-meta p { margin: 0; color: var(--text-muted); }
+    .control-list { display: grid; gap: 7px; margin: 0; padding: 0; color: var(--text-muted); list-style: none; }
+    .control-list strong { color: var(--text-main); }
 
     .garage-grid, .news-grid, .project-grid {
       display: grid;
@@ -366,6 +378,7 @@
 
     @media (max-width: 820px) {
       .garage-grid, .news-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .download-grid { grid-template-columns: 1fr; }
       .company-panel { grid-template-columns: 1fr; }
     }
     @media (max-width: 560px) {
@@ -391,6 +404,7 @@
       <a class="header-logo" href="#top" aria-label="Pocket Drift home">Pocket Drift</a>
       <nav aria-label="Main navigation">
         <a href="#about">About</a>
+        <a href="#download">Download</a>
         <a href="#garage">Cars</a>
         <a href="#news">News</a>
         <a href="#signup">Testers</a>
@@ -404,7 +418,10 @@
         <p class="eyebrow">Miniature motorsport / v3.1 beta</p>
         <h1 id="hero-title"><span>Miniature Motorsport</span><br>On A Workshop Bench</h1>
         <p class="hero-copy">Tiny cars. Big attitude. Experience sweeping corners, oversized workshop props, and high-octane drifting.</p>
-        <a href="#signup" class="cta-button">Get beta updates</a>
+        <div class="hero-actions">
+          <a href="Releases/Pocket-Drift-Overdrive-v3.1-Beta-Windows.zip" class="cta-button" download>Download Windows beta</a>
+          <a href="#download" class="cta-button secondary">Install guide</a>
+        </div>
       </section>
 
       <div class="racing-divider-curb" aria-hidden="true"></div>
@@ -414,6 +431,39 @@
           <h2 class="section-title" id="about-title">Built for the bench.</h2>
         </div>
         <p class="project-copy">Pocket Drift: Overdrive pairs miniature GT-style cars with oversized workshop tools and a purpose-built circuit. Developed in Unity by Casper under Branded Creations 2026, it brings big motorsport energy to a tiny racing world.</p>
+      </section>
+
+      <div class="racing-divider-curb" aria-hidden="true"></div>
+      <section id="download" class="content-section" aria-labelledby="download-title">
+        <div class="section-heading">
+          <p class="eyebrow">02 / Public beta download</p>
+          <h2 class="section-title" id="download-title">Get on the grid.</h2>
+          <p class="section-intro">Download the complete Windows 64-bit v3.1 beta as one 38.6 MB ZIP. Unity and a separate installer are not required.</p>
+        </div>
+        <div class="download-grid">
+          <div class="download-card">
+            <h3>Install in four steps</h3>
+            <ol class="install-steps">
+              <li>Download the beta ZIP using the official button.</li>
+              <li>Extract the entire ZIP into a new folder.</li>
+              <li>Keep the EXE, Data folder, UnityPlayer.dll, and MonoBleedingEdge together.</li>
+              <li>Run <strong>Pocket Drift Overdrive.exe</strong>. If SmartScreen appears, verify that this is the official project download before continuing.</li>
+            </ol>
+          </div>
+          <aside class="download-card download-meta">
+            <div>
+              <h3>Windows beta v3.1</h3>
+              <p>Requires 64-bit Windows 10 or Windows 11. Keyboard and gamepad are supported.</p>
+            </div>
+            <a href="Releases/Pocket-Drift-Overdrive-v3.1-Beta-Windows.zip" class="cta-button" download>Download 38.6 MB</a>
+            <ul class="control-list">
+              <li><strong>Drive:</strong> WASD or arrow keys</li>
+              <li><strong>Drift / boost:</strong> Space / Left Shift</li>
+              <li><strong>Weapon:</strong> E / Enter / left mouse</li>
+              <li><strong>Respawn:</strong> R</li>
+            </ul>
+          </aside>
+        </div>
       </section>
 
       <div class="racing-divider-curb" aria-hidden="true"></div>

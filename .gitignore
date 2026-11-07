@@ -45,3 +45,8 @@ Desktop.ini
 # Generated packet review images
 press-kit/preview-*.png
 press-kit/packet-overview.png
+
+# Local expanded beta builds and smoke-test logs
+Releases/*/
+Releases/*.log
+Releases/site-*.png
